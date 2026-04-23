@@ -1,0 +1,14 @@
+{
+  "topic": "automacao juridica com IA",
+  "audience": "profissionais do direito e operadores de automacao",
+  "language": "pt-BR",
+  "goal": "gerar fontes para NotebookLM e insumos para posts e artigos",
+  "platforms": ["instagram", "linkding", "article"],
+  "keywords": [
+    "automacao juridica ia",
+    "legal ops ai",
+    "llm para advocacia",
+    "fluxos juridicos com ia"
+  ],
+  "max_results": 10
+}
