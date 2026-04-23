@@ -1,4 +1,10 @@
 __pycache__/
 .venv/
+.env
+.env.*
+!.env.example
+*.local
 output/*.json
 output/*.md
+output-real/
+output-phase3/

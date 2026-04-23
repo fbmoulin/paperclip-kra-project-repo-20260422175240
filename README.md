@@ -78,7 +78,15 @@ Para busca real, configure:
 export YOUTUBE_API_KEY="sua-chave-aqui"
 ```
 
+Ou copie o arquivo de exemplo:
+
+```bash
+cp .env.example .env
+```
+
 Sem isso, o pipeline gera fontes placeholder para você validar a arquitetura e os exports.
+
+> Não commite `.env` com chave real.
 
 ## Saídas
 
