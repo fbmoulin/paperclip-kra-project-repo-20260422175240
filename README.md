@@ -19,6 +19,7 @@ O MVP atual entrega:
 - CLI para executar o pipeline
 - integração real com YouTube Data API quando `YOUTUBE_API_KEY` estiver configurada
 - fallback seguro para placeholders quando a chave não estiver configurada
+- fallback seguro para placeholders quando a API do YouTube estiver indisponível ou retornar erro
 - etapas de:
   - ingestão de tópicos
   - descoberta de fontes

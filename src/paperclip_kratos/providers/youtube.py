@@ -3,11 +3,16 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote_plus, urlencode
 from urllib.request import urlopen
 
 from ..models import TopicConfig, VideoSource
 from .transcript import TranscriptProvider
+
+
+class YouTubeProviderError(RuntimeError):
+    """Erro de integração com YouTube Data API."""
 
 
 class YouTubeDiscoveryProvider:
@@ -18,6 +23,7 @@ class YouTubeDiscoveryProvider:
 
     SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
     VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
+    REQUEST_TIMEOUT_SECONDS = 15
 
     def __init__(self) -> None:
         self.transcripts = TranscriptProvider()
@@ -25,13 +31,26 @@ class YouTubeDiscoveryProvider:
     def discover(self, config: TopicConfig) -> list[VideoSource]:
         api_key = os.getenv("YOUTUBE_API_KEY", "").strip()
         if not api_key:
-            return self._placeholder_results(config)
+            return self._placeholder_results(config, reason="YOUTUBE_API_KEY não configurada")
 
         sources: list[VideoSource] = []
+        api_errors: list[str] = []
         for keyword in config.keywords[: config.max_results]:
-            search_items = self._search(keyword, config.max_results, api_key)
+            try:
+                search_items = self._search(keyword, config.max_results, api_key)
+            except YouTubeProviderError as exc:
+                api_errors.append(f"Keyword '{keyword}': {exc}")
+                continue
+
             video_ids = [item["id"]["videoId"] for item in search_items if item.get("id", {}).get("videoId")]
-            details_map = self._video_details(video_ids, api_key) if video_ids else {}
+            if video_ids:
+                try:
+                    details_map = self._video_details(video_ids, api_key)
+                except YouTubeProviderError as exc:
+                    api_errors.append(f"Detalhes dos vídeos para '{keyword}': {exc}")
+                    details_map = {}
+            else:
+                details_map = {}
 
             for item in search_items:
                 video_id = item.get("id", {}).get("videoId")
@@ -62,7 +81,16 @@ class YouTubeDiscoveryProvider:
         deduped: dict[str, VideoSource] = {}
         for source in sorted(sources, key=lambda item: item.score, reverse=True):
             deduped.setdefault(source.url, source)
-        return list(deduped.values())[: config.max_results]
+        selected = list(deduped.values())[: config.max_results]
+        if selected:
+            if api_errors:
+                selected[0].notes.append(
+                    "Aviso: parte da coleta falhou na API do YouTube; resultados podem estar incompletos."
+                )
+            return selected
+
+        reason = " ; ".join(api_errors) if api_errors else "Nenhum resultado retornado pela YouTube Data API"
+        return self._placeholder_results(config, reason=reason)
 
     def _search(self, keyword: str, max_results: int, api_key: str) -> list[dict]:
         params = {
@@ -74,8 +102,7 @@ class YouTubeDiscoveryProvider:
             "order": "relevance",
             "key": api_key,
         }
-        with urlopen(f"{self.SEARCH_URL}?{urlencode(params)}") as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        payload = self._request_json(f"{self.SEARCH_URL}?{urlencode(params)}")
         return payload.get("items", [])
 
     def _video_details(self, video_ids: list[str], api_key: str) -> dict[str, dict]:
@@ -84,9 +111,34 @@ class YouTubeDiscoveryProvider:
             "id": ",".join(video_ids),
             "key": api_key,
         }
-        with urlopen(f"{self.VIDEOS_URL}?{urlencode(params)}") as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        payload = self._request_json(f"{self.VIDEOS_URL}?{urlencode(params)}")
         return {item["id"]: item for item in payload.get("items", [])}
+
+    def _request_json(self, url: str) -> dict:
+        try:
+            with urlopen(url, timeout=self.REQUEST_TIMEOUT_SECONDS) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            message = self._format_http_error(exc)
+            raise YouTubeProviderError(message) from exc
+        except URLError as exc:
+            raise YouTubeProviderError(f"falha de rede: {exc.reason}") from exc
+        except TimeoutError as exc:
+            raise YouTubeProviderError("tempo limite excedido") from exc
+        except json.JSONDecodeError as exc:
+            raise YouTubeProviderError("resposta inválida da API") from exc
+
+    @staticmethod
+    def _format_http_error(exc: HTTPError) -> str:
+        default_message = f"HTTP {exc.code}: {exc.reason}"
+        try:
+            payload = json.loads(exc.read().decode("utf-8"))
+        except Exception:  # noqa: BLE001
+            return default_message
+        api_message = payload.get("error", {}).get("message")
+        if api_message:
+            return f"HTTP {exc.code}: {api_message}"
+        return default_message
 
     def _score_result(self, snippet: dict, details: dict, keyword: str, has_transcript: bool) -> float:
         score = 0.3
@@ -160,7 +212,7 @@ class YouTubeDiscoveryProvider:
             use_cases.append("Tutorial")
         return use_cases
 
-    def _placeholder_results(self, config: TopicConfig) -> list[VideoSource]:
+    def _placeholder_results(self, config: TopicConfig, reason: str) -> list[VideoSource]:
         sources: list[VideoSource] = []
         for idx, keyword in enumerate(config.keywords[: config.max_results], start=1):
             score = max(0.1, 1.0 - (idx * 0.05))
@@ -175,11 +227,11 @@ class YouTubeDiscoveryProvider:
                     ),
                     score=round(score, 2),
                     notes=[
-                        "YOUTUBE_API_KEY não configurada",
+                        reason,
                         "Verificar autoridade do canal",
                         "Extrair timestamps relevantes",
                     ],
-                    use_cases=["NotebookLM", "Instagram", "Linkding", "Artigo"],
+                    use_cases=self._suggest_use_cases(config, round(score, 2)),
                     transcript_available=False,
                     transcript_excerpt=None,
                     editorial_angles=[
