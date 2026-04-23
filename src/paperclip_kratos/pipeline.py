@@ -7,6 +7,7 @@ from .models import ResearchRun, TopicConfig
 from .providers.youtube import YouTubeDiscoveryProvider
 from .exporters.markdown import render_markdown_report
 from .exporters.notebooklm import render_notebooklm_sources
+from .exporters.briefs import render_content_briefs
 
 
 class ResearchPipeline:
@@ -36,5 +37,8 @@ class ResearchPipeline:
         )
         (output_path / "notebooklm-sources.md").write_text(
             render_notebooklm_sources(run), encoding="utf-8"
+        )
+        (output_path / "content-briefs.md").write_text(
+            render_content_briefs(run), encoding="utf-8"
         )
         return run

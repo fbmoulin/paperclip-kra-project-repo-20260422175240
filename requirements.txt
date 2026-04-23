@@ -1,1 +1,1 @@
-# No mandatory runtime dependencies for the MVP
+youtube-transcript-api>=0.6.2

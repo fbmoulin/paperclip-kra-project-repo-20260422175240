@@ -30,6 +30,9 @@ class VideoSource:
     score: float = 0.0
     notes: list[str] = field(default_factory=list)
     use_cases: list[str] = field(default_factory=list)
+    transcript_available: bool = False
+    transcript_excerpt: str | None = None
+    editorial_angles: list[str] = field(default_factory=list)
 
 
 @dataclass

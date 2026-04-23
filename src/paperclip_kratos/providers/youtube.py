@@ -7,6 +7,7 @@ from urllib.parse import quote_plus, urlencode
 from urllib.request import urlopen
 
 from ..models import TopicConfig, VideoSource
+from .transcript import TranscriptProvider
 
 
 class YouTubeDiscoveryProvider:
@@ -17,6 +18,9 @@ class YouTubeDiscoveryProvider:
 
     SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
     VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
+
+    def __init__(self) -> None:
+        self.transcripts = TranscriptProvider()
 
     def discover(self, config: TopicConfig) -> list[VideoSource]:
         api_key = os.getenv("YOUTUBE_API_KEY", "").strip()
@@ -35,7 +39,8 @@ class YouTubeDiscoveryProvider:
                     continue
                 snippet = item.get("snippet", {})
                 details = details_map.get(video_id, {})
-                score = self._score_result(snippet, details, keyword)
+                transcript = self.transcripts.fetch(video_id)
+                score = self._score_result(snippet, details, keyword, transcript["available"])
                 sources.append(
                     VideoSource(
                         title=snippet.get("title", "Sem título"),
@@ -46,8 +51,11 @@ class YouTubeDiscoveryProvider:
                         duration=details.get("contentDetails", {}).get("duration"),
                         views=self._safe_int(details.get("statistics", {}).get("viewCount")),
                         score=score,
-                        notes=self._build_notes(snippet, details, keyword),
+                        notes=self._build_notes(snippet, details, keyword, transcript),
                         use_cases=self._suggest_use_cases(config, score),
+                        transcript_available=transcript["available"],
+                        transcript_excerpt=transcript["excerpt"],
+                        editorial_angles=self._editorial_angles(snippet, keyword, transcript["excerpt"]),
                     )
                 )
 
@@ -80,7 +88,7 @@ class YouTubeDiscoveryProvider:
             payload = json.loads(response.read().decode("utf-8"))
         return {item["id"]: item for item in payload.get("items", [])}
 
-    def _score_result(self, snippet: dict, details: dict, keyword: str) -> float:
+    def _score_result(self, snippet: dict, details: dict, keyword: str, has_transcript: bool) -> float:
         score = 0.3
         title = (snippet.get("title") or "").lower()
         description = (snippet.get("description") or "").lower()
@@ -109,9 +117,12 @@ class YouTubeDiscoveryProvider:
             elif age_days <= 180:
                 score += 0.05
 
+        if has_transcript:
+            score += 0.08
+
         return round(min(score, 1.0), 2)
 
-    def _build_notes(self, snippet: dict, details: dict, keyword: str) -> list[str]:
+    def _build_notes(self, snippet: dict, details: dict, keyword: str, transcript: dict) -> list[str]:
         notes = [f"Encontrado pela keyword: {keyword}"]
         views = self._safe_int(details.get("statistics", {}).get("viewCount"))
         if views is not None:
@@ -119,8 +130,23 @@ class YouTubeDiscoveryProvider:
         duration = details.get("contentDetails", {}).get("duration")
         if duration:
             notes.append(f"Duração ISO-8601: {duration}")
-        notes.append("Validar transcript e timestamps antes de usar como fonte primária")
+        if transcript["available"]:
+            notes.append("Transcript disponível para extração de insights")
+        else:
+            notes.append(f"Transcript indisponível: {transcript['reason']}")
+        notes.append("Validar narrativa, autoridade do canal e timestamps antes de uso final")
         return notes
+
+    def _editorial_angles(self, snippet: dict, keyword: str, transcript_excerpt: str | None) -> list[str]:
+        title = snippet.get("title", "")
+        angles = [
+            f"Resumo prático sobre {keyword}",
+            f"Comentário crítico a partir do vídeo '{title}'",
+        ]
+        if transcript_excerpt:
+            angles.append("Carrossel com 3 aprendizados extraídos do transcript")
+            angles.append("Post com insight acionável + fonte citada")
+        return angles
 
     def _suggest_use_cases(self, config: TopicConfig, score: float) -> list[str]:
         use_cases = ["NotebookLM"]
@@ -154,6 +180,12 @@ class YouTubeDiscoveryProvider:
                         "Extrair timestamps relevantes",
                     ],
                     use_cases=["NotebookLM", "Instagram", "Linkding", "Artigo"],
+                    transcript_available=False,
+                    transcript_excerpt=None,
+                    editorial_angles=[
+                        f"Resumo introdutório sobre {keyword}",
+                        "Carrossel educativo com conceitos básicos",
+                    ],
                 )
             )
         return sources

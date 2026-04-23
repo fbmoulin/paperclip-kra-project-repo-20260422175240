@@ -24,11 +24,16 @@ def render_markdown_report(run: ResearchRun) -> str:
                 f"- Canal: {source.channel}",
                 f"- URL: {source.url}",
                 f"- Score: {source.score}",
+                f"- Transcript disponível: {'sim' if source.transcript_available else 'não'}",
                 f"- Uso sugerido: {', '.join(source.use_cases)}",
                 f"- Descrição: {source.description}",
                 "- Notas:",
                 *[f"  - {note}" for note in source.notes],
+                "- Ângulos editoriais:",
+                *[f"  - {angle}" for angle in source.editorial_angles],
                 "",
             ]
         )
+        if source.transcript_excerpt:
+            lines.extend(["**Trecho inicial do transcript**", "", source.transcript_excerpt, ""])
     return "\n".join(lines)

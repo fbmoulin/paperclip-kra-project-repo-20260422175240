@@ -36,7 +36,9 @@ src/
     pipeline.py
     providers/
       youtube.py
+      transcript.py
     exporters/
+      briefs.py
       markdown.py
       notebooklm.py
 configs/
@@ -84,11 +86,17 @@ Arquivos gerados em `output/`:
 - `research-report.json`
 - `research-report.md`
 - `notebooklm-sources.md`
+- `content-briefs.md`
+
+## Transcript e insights
+
+Se `youtube-transcript-api` estiver instalado, o pipeline tenta capturar transcript automaticamente.
+Quando não houver transcript ou a biblioteca não estiver disponível, o fluxo continua com fallback seguro.
 
 ## Próximos passos
 
-- integrar transcript extraction
 - adicionar score por autoridade do canal e recência por nicho
-- gerar briefs de Instagram, Linkding e artigos
+- priorizar vídeos com transcript e sinais de profundidade
 - adicionar persistência e histórico de execuções
 - incluir filtros por idioma, duração e data
+- gerar ranking por objetivo editorial
