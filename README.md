@@ -17,6 +17,8 @@ O MVP atual entrega:
 - estrutura inicial do projeto
 - configuração por arquivo JSON
 - CLI para executar o pipeline
+- integração real com YouTube Data API quando `YOUTUBE_API_KEY` estiver configurada
+- fallback seguro para placeholders quando a chave não estiver configurada
 - etapas de:
   - ingestão de tópicos
   - descoberta de fontes
@@ -62,8 +64,19 @@ prompts/
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+export PYTHONPATH=src
 python -m paperclip_kratos.cli run --config configs/topics.example.json
 ```
+
+### YouTube Data API
+
+Para busca real, configure:
+
+```bash
+export YOUTUBE_API_KEY="sua-chave-aqui"
+```
+
+Sem isso, o pipeline gera fontes placeholder para você validar a arquitetura e os exports.
 
 ## Saídas
 
@@ -74,8 +87,8 @@ Arquivos gerados em `output/`:
 
 ## Próximos passos
 
-- integrar busca real em YouTube Data API
 - integrar transcript extraction
-- adicionar score por autoridade do canal
+- adicionar score por autoridade do canal e recência por nicho
 - gerar briefs de Instagram, Linkding e artigos
 - adicionar persistência e histórico de execuções
+- incluir filtros por idioma, duração e data
